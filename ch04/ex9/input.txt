@@ -1,0 +1,242 @@
+
+コミュニティ
+
+キーワードを入力
+ユーザ登録
+ログイン
+94
+
+Ee58abb49000f2ba17b615736d425039 normal
+@tnoda_
+2015年01月13日に更新
+Go 言語で標準入力から読み込む競技プログラミングのアレ --- 改訂第二版
+Go
+ この記事は最終更新日から1年以上が経過しています。
+大幅に加筆して改訂第二版としました 2015-01-11
+まえがき
+
+Go が競技プログラミングに向いているかどうかの議論は別として．
+はじめに
+
+競技プログラミングでは，標準入力からスペースまたは改行で区切られた大量の数値や文字列を読み込むことがよくあります(たとえば，AtCoder Begineer Contest #002 の入力 など)．C++ など競技プログラミングのメジャー言語の場合は，ノウハウが蓄積されていて，Google 先生に聞けばいくらでも教えてもらえるのですが（例），Go となるとそうはいきません．そもそも，例に挙げた AtCoder でも Go 使えないですし（初版 2014年6月14日現在; 2015年1月11日再確認）．
+そこで，godoc を見ながら使えそうなものを探してみました．想定としては C++ の cin >> とか Java の java.util.Scanner とかと同等のものを考えています．これより速いもの，自前で入力ライブラリを作ることは，まだ，考えていません．なお，この文章を書いた人は Go を始めたばかりなので，正確性など内容は保証できません．誤り，改善点などにお気づきの方は，コメントくださいますと助かります．
+答え: ときと場合によって使い分ける
+
+先に答えを言ってしまうと，次の 3 つの方法を使い分けます。
+簡単に書きたいとき
+fmt.Scan を使う
+たくさん (> 10^5) 読み込みたいとき
+bufio の Scanner を使う
+長い行を (> 64x10^3) 読み込みたいとき
+bufio の ReadLine を使う
+fmt.Scan で軽快に読み込む
+
+速度を気にしなくてもよいのなら fmt.Scan を使う方法が一番簡単です。
+import "fmt"
+して、
+var a int
+fmt.Scan(&a)
+すれば、 a に int が読み込まれます。記述量が少なくて済むので、制約が無ければ、この方法で書くのが簡単です。しかし、 fmt.Scan による方法は、この記事で紹介する方法の中で最も遅い方法です。感覚ですが 1 秒間に読み込めるのは 10^5 個くらいです。大量にかつ高速に読み込む必要がある場合には、次の bufio を使う方法を考慮しましょう。
+bufio の Scanner を使う (1) 一行づつ読み込む
+
+たとえば，AtCoder Beginner Contest #003 B 問題 のように，文字列が改行区切りで与えられている場合を考えます．Go の標準入力は os.Stdin なので， Scanner は，
+var sc = bufio.NewScanner(os.Stdin)
+で用意できます．デフォルトでは Scanner は一行ずつ読み込みます．Scanner は Scan メソッドでトークンを読み込みます．Scanner が読み込んだトークンを文字列として取り出すには Text メソッドを使います．これらを組み合わせて，標準入力から一行ずつ読み込んでみましょう．
+package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+)
+
+var sc = bufio.NewScanner(os.Stdin)
+
+func main() {
+    var s, t string
+    if sc.Scan() {
+        s = sc.Text()
+    }
+    if sc.Scan() {
+        t = sc.Text()
+    }
+    fmt.Println(s)
+    fmt.Println(t)
+}
+これを試してみます．
+$ cat in
+ch@ku@ai
+choku@@i
+
+$ go run main.go < in
+ch@ku@ai
+choku@@i
+望み通りの結果が得られました．ただし，sc.Scan, sc.Text を繰り返すのは冗長なので，まとめて，nextLine という関数を定義します．
+package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+)
+
+var sc = bufio.NewScanner(os.Stdin)
+
+func nextLine() string {
+    sc.Scan()
+    return sc.Text()
+}
+
+func main() {
+    s, t := nextLine(), nextLine()
+    fmt.Println(s)
+    fmt.Println(t)
+}
+nextLine() 関数で sc.Scan() の戻り値を確認していませんが，競技プログラミングの場合，入力の個数が事前に分かっていることがほとんどなので大丈夫です．
+$ go run main.go < in
+ch@ku@ai
+choku@@i
+bufio の Scanner を使う (2) スペース区切りで読み込む
+
+もう一つ，競技プログラミングで多いパターンが，スペース区切りの数値データを読み込むというものです（例）．一つ前の nextLine の場合，改行区切りだったのを，今度は空白区切りにする必要があります．ちょうど， Scanner にはこの挙動を変えるためのメソッド，Split が用意されているのでそれを使います．Split に ScanWords を渡してあげると， Scanner は空白文字 (Go の unicode.IsSpace) を区切り文字としてトークンを切り出します．
+sc.Split(bufio.ScanWords)
+これでスペース区切りの文字列として取り出すことができるようになりました．あとは，この文字列を数値に変換するだけです．文字列から数値への変換は， strconv パッケージを使えばできそうです．浮動小数点数値への変換には ParseFloat が，整数値への変換には ParseInt 関数が，それぞれ使えます．単に 10 進整数なら Atoi で十分です．文字列のときの nextString と同様，nextInt 関数を作ってみましょう．
+package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+    "strconv"
+)
+
+var sc = bufio.NewScanner(os.Stdin)
+
+func nextInt() int {
+    sc.Scan()
+    i, e := strconv.Atoi(sc.Text())
+    if e != nil {
+        panic(e)
+    }
+    return i
+}
+
+func main() {
+    sc.Split(bufio.ScanWords)
+    n := nextInt()
+    x := 0
+    for i := 0; i < n; i++ {
+        x += nextInt()
+    }
+    fmt.Println(x)
+}
+この例は，最初の整数 N に対して，それに続く N 個の整数の和を求めるプログラムです．次の入力で試してみましょう．
+$ cat in
+7
+2 32 9 40 1 8 13
+
+$ go run main.go < in
+105
+7 つの整数の和を求めることができました．
+bufio の ReadLine で読み込む
+
+bufio の Scanner は万能のように思えてきますが、一つ弱点があります。それは、長過ぎるトークンを読み込もうとすると失敗することです。 bufio のドキュメントを見ていると、次のような記述があります。
+const (
+    // Maximum size used to buffer a token. The actual maximum token size
+    // may be smaller as the buffer may need to include, for instance, a newline.
+    MaxScanTokenSize = 64 * 1024
+)
+どうやら 64x1024 を越える入力は一度に読み込めないようです。競技プログラミングでいうと、行単位で長大文字列 (> 10^5) を読み込むような問題に遭遇することがありますが、そのような長い文字列は bufio の Scanner では読み込めません。
+そんなときに便利なのが ReadLine です。
+func (b *Reader) ReadLine() (line []byte, isPrefix bool, err error)
+ReadLine は行をバッファに読み込みきれなかった場合、すなわち、読み残しがある場合に、 isPrefix を true にして続きを読めるような戻り値を返します。これを利用して、 isPrefix が false になるまで ReadLine を繰り返せば、どんなに長い行でもメモリの許す限り読み込めます。
+ReadLine が利用する Reader を作成するには bufio.NewReader を利用します。 bufio.NewReader にはバッファサイズを指定できる bufio.NewReaderSize という亜種があり、この関数を利用してバッファを大きくすると一度の ReadLine で読み込めてしまいます。
+以下に、これらを混ぜたサンプル関数 readLine を示します。
+var rdr = bufio.NewReaderSize(os.Stdin, 1000000)
+
+func readLine() string {
+    buf := make([]byte, 0, 1000000)
+    for {
+        l, p, e := rdr.ReadLine()
+        if e != nil {
+            panic(e)
+        }
+        buf = append(buf, l...)
+        if !p {
+            break
+        }
+    }
+    return string(buf)
+}
+実際には、バッファサイズを大きくして一度の ReadLine で読み込むか、 isPrefix を確認しながら ReadLine を繰り返して実行するかのどちらかで書くことになると思います。
+おわりに
+
+今回は競技プログラミングにありがちな標準入力からスペースあるいは改行で区切られた入力を Go で読み込む方法について考えてみました．今回使ったパッケージ，関数などを整理してみます．
+bufio
+NewScanner
+ScanWords
+Scanner.Text
+Scanner.Split
+NewReader
+NewReaderSize
+Reader.ReadLine
+strconv
+ParseInt
+ParseFloat
+os
+Stdin
+Go に標準で備わっているものを使うとこんな感じでしょうか．Java だと java.util.Scanner.nextInt() とか java.util.Scanner.nextLine() とかといった便利メソッドが用意されているのですが，Go にはそれに相当するものが見当たらなかったために，いくつかのメソッドを組み合わせて自作しました．競技プログラミングに参加するときは，これらをライブラリとして整備しておいたほうがよいかもしれません．といってもどれも一瞬で書けるので、ライブラリ化しないと Go で競技プログラミングできないというほどでもありません。
+繰り返しにはなりますが，AtCoder は Go をサポートしていないので，Go で AtCoder の競技に参加することはできません．AtCoder に参加するときは，D 言語のように Go 言語以外でサポートされている言語を使いましょう．
+
+
+ この記事は以下の記事からリンクされています
+過去の1件を表示する
+「連結されたgzipを1行ずつ見る」をgolangでやったらハマったからリンク2年以上前
+Google Code Jamを多言語で解くからリンク1年以上前
+Goチートシート（個人メモ）からリンク1年以上前
+競技プログラミングで使うGo言語基礎からリンク約1年前
+golang メモからリンク7ヶ月前
+
+
+まえがき
+はじめに
+答え: ときと場合によって使い分ける
+fmt.Scan で軽快に読み込む
+bufio の Scanner を使う (1) 一行づつ読み込む
+bufio の Scanner を使う (2) スペース区切りで読み込む
+bufio の ReadLine で読み込む
+おわりに
+Ee58abb49000f2ba17b615736d425039 normal
+@tnoda_
+Scala ときどき Clojure
+フォロー
+
+ストック
+いいね
+94
+
+Toot
+
+
+
+tnoda_
+684contribution
+2015-01-02 18:54
+いいね
+1
+だいぶ昔に書いたこの方法ですが、今は使っていません。標準入力からの読み込みであれば、 fmt.Scan と fmt.Scanln でだいたい事足りるからです。
+
+tnoda_
+684contribution
+2015-01-09 20:01
+いいね
+0
+とはいえ、 fmt.Scan よりも bufio.Scanner 使うほうが速いので、大量の数値を読み込む際に fmt.Scan で TLE しそうであれば、最初から bufio.Scanner で書くほうが無難かもしれません。
+
+tnoda_
+684contribution
+2015-01-11 20:36
+いいね
+1
+大幅に加筆して改訂第二版としました 2015-01-11
+© 2011-2017 Increments Inc.利用規約プライバシーヘルプお問い合わせQiitaとはユーザータグ投稿ブログAPITeamKobito ご意見
