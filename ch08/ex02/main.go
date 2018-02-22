@@ -21,6 +21,11 @@ func (cc clientConn) close() error {
 	return cc.conn.Close()
 }
 
+func (cc clientConn) write(input string) error {
+	_, err := io.WriteString(cc.conn, input+"\n")
+	return err
+}
+
 func newClientConn(conn net.Conn) *clientConn {
 	var cc clientConn
 	cc.conn = conn
@@ -30,9 +35,6 @@ func newClientConn(conn net.Conn) *clientConn {
 }
 
 func main() {
-}
-
-func test() {
 	listen, err := net.Listen("tcp", ":21")
 	if err != nil {
 		log.Fatal(err)
@@ -68,9 +70,15 @@ func handleConn(conn net.Conn) {
 			dir, ok := changeDir(cmd[1])
 			if ok {
 				cc.current += "/" + dir
+			} else {
+				cc.write(dir)
 			}
 		case "NLST":
-			showList(cc.current)
+			list := getList(cc.current)
+			err := cc.write(list)
+			if err != nil {
+				log.Println(err)
+			}
 		case "RETR":
 			// 指定ファイルをクライアントに送信
 			bytes, err := ioutil.ReadFile(cmd[1])
@@ -78,7 +86,10 @@ func handleConn(conn net.Conn) {
 				log.Println(err)
 			}
 			// bytesを使ってクライアント側に送る
-			log.Println(bytes)
+			if err != nil {
+				log.Println(err)
+			}
+			cc.conn.Write(bytes)
 		case "EXIT":
 			err := cc.close()
 			if err != nil {
@@ -92,18 +103,22 @@ func handleConn(conn net.Conn) {
 	}
 }
 
-func showList(dir string) {
+func getList(dir string) string {
+	var nameList string
 	files, _ := ioutil.ReadDir(dir)
 	for _, file := range files {
 		fmt.Printf("%s ", file.Name())
+		nameList += file.Name() + " "
 	}
+	return nameList
 }
 
 func changeDir(to string) (string, bool) {
 	_, err := ioutil.ReadDir(to)
 	if err != nil {
-		log.Println("dont exist such folder")
-		return "", false
+		message := fmt.Sprintf("dont exist %s\n", to)
+		log.Print(message)
+		return message, false
 	}
 	return to, true
 }
