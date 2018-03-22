@@ -11,6 +11,24 @@ import (
 	"strings"
 )
 
+const (
+	statusTransferStarting      = 125
+	statusCommandOk             = 200
+	statusCommandNotImplemented = 202
+	statusName                  = 215
+	statusReady                 = 220
+	statusLoggedOut             = 221
+	statusClosingDataConnection = 226
+	statusLoggedIn              = 230
+	statusFileActionCompleted   = 250
+	statusPathCreated           = 257
+
+	statusUserOK                      = 331
+	statusRequestedFileActionNotTaken = 450
+	statusCommandNotImplemented502    = 502
+	statusActionNotTaken              = 550
+)
+
 type clientConn struct {
 	conn    net.Conn
 	r       *textproto.Reader
@@ -21,8 +39,13 @@ func (cc clientConn) close() error {
 	return cc.conn.Close()
 }
 
-func (cc clientConn) write(input string) error {
-	_, err := io.WriteString(cc.conn, input+"\n")
+func (cc clientConn) write(code int, input string) error {
+	var err error
+	if input == "" {
+		_, err = io.WriteString(cc.conn, fmt.Sprintf("%d\n", code))
+	} else {
+		_, err = io.WriteString(cc.conn, fmt.Sprintf("%d %s\n", code, input))
+	}
 	return err
 }
 
@@ -52,6 +75,7 @@ func main() {
 func handleConn(conn net.Conn) {
 	log.Println("connected")
 	cc := newClientConn(conn)
+	cc.write(statusCommandOk, "")
 	for {
 		line, err := cc.r.ReadLine()
 		if err != nil {
@@ -71,11 +95,11 @@ func handleConn(conn net.Conn) {
 			if ok {
 				cc.current += "/" + dir
 			} else {
-				cc.write(dir)
+				cc.write(statusCommandOk, dir)
 			}
-		case "NLST":
+		case "LIST":
 			list := getList(cc.current)
-			err := cc.write(list)
+			err := cc.write(statusCommandOk, list)
 			if err != nil {
 				log.Println(err)
 			}
@@ -96,9 +120,26 @@ func handleConn(conn net.Conn) {
 				log.Println(err)
 			}
 			return
+		case "USER":
+			cc.write(statusUserOK, "")
+		case "PASS":
+			cc.write(statusLoggedIn, fmt.Sprintf("Hello %s!", cmd[1]))
+		case "SYST":
+			err := cc.write(statusName, "UNIX")
+			if err != nil {
+				log.Printf("%v", err)
+			}
+		case "FEAT", "LPRT", "EPRT", "LPSV", "EPSV":
+			if err := cc.write(statusCommandNotImplemented502, ""); err != nil {
+				log.Printf("%v", err)
+			}
+		case "PWD":
+			cc.write(statusPathCreated, cc.current)
+
 		default:
 			// not implemented
 			log.Println("not implemented")
+			cc.write(statusCommandNotImplemented, "not implemented")
 		}
 	}
 }
